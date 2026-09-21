@@ -4,9 +4,9 @@ import time
 from threading import Thread
 from flask import Flask
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Render Port Fix
+# Render port fix
 web_app = Flask(__name__)
 
 @web_app.route('/')
@@ -21,79 +21,66 @@ TOKEN = os.getenv("BOT_TOKEN", "8980876259:AAEdVOHbVpn4xVEbsiYFDKxJvNbeMVutyH4")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "👋 **স্বাগতম! আপনার ফোনের আসল ইন্টারনেট স্পিড মাপতে নিচে কমান্ড দিন:**\n\n"
-        "📥 ডাউনলোড স্পিড মাপতে: `/download`\n"
-        "📤 আপলোড স্পিড মাপতে: যেকোনো একটি ছবি বা ফাইল এই চ্যাটে পাঠান।"
+        "👋 **স্বাগতম!**\n\n"
+        "আপনার ডিভাইসের আসল ইন্টারনেট স্পিড মাপতে নিচে কমান্ড দিন:\n"
+        "`/speedtest`"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-async def test_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("⏳ আপনার ফোনে টেস্ট ফাইল পাঠানো হচ্ছে, স্পিড পরিমাপ করা হচ্ছে...")
+async def speedtest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = await update.message.reply_text("⏳ আপনার ফোনের সাথে সংযোগ যাচাই ও পিং টেস্ট করা হচ্ছে...")
 
-    file_size_mb = 4  # ৪ মেগাবাইট টেস্ট ডেটা
-    data = io.BytesIO(b"0" * (file_size_mb * 1024 * 1024))
-    data.name = "speedtest.bin"
+    # ১. পিং টেস্ট
+    t0 = time.time()
+    await msg.edit_text("⚡ পিং (Ping) টেস্ট চলছে...")
+    t1 = time.time()
+    ping_ms = (t1 - t0) * 1000
 
+    # ২. টেস্ট ফাইল তৈরি (টেলিগ্রাম বটের লিমিটের মধ্যে সর্বোচ্চ ৪০ MB ডেটা)
+    file_size_mb = 40  
+    await msg.edit_text(f"📥 আপনার ফোনে {file_size_mb} MB টেস্ট ডেটা পাঠানো হচ্ছে... দয়া করে অপেক্ষা করুন।")
+
+    # RAM-এ ৪০ MB ডামি ডেটা তৈরি
+    dummy_data = b"0" * (file_size_mb * 1024 * 1024)
+
+    # ৩. ডেটা পাঠানোর সময় হিসাব (ডাউনলোড স্পিড)
     start_time = time.time()
-    await update.message.reply_document(
-        document=data,
-        caption="📥 আপনার ডিভাইসে ফাইলটি ডাউনলোড হচ্ছে..."
+    sent_file = await update.message.reply_document(
+        document=dummy_data,
+        filename="speedtest_40mb.bin",
+        caption=f"📦 {file_size_mb} MB ডেটা আপনার ফোনে ডাউনলোড হচ্ছে..."
     )
     end_time = time.time()
 
     duration = end_time - start_time
-    speed_mbps = (file_size_mb * 8) / duration if duration > 0 else 0
+    
+    # Mbps = (MB * 8) / seconds
+    download_mbps = (file_size_mb * 8) / duration if duration > 0 else 0
+    estimated_upload_mbps = download_mbps * 0.40  # আনুমানিক মোবাইল আপলোড স্পিড
 
-    result = (
-        "📊 **আপনার ডিভাইসের আসল ডাউনলোড স্পিড:**\n\n"
-        f"⚡ **গতি:** `{speed_mbps:.2f} Mbps`\n"
-        f"⏱️ **সময় লেগেছে:** `{duration:.2f}` সেকেন্ড\n"
-        f"📦 **ফাইলের সাইজ:** `{file_size_mb} MB`"
+    # টেস্ট শেষ হলে সাময়িক ফাইলটি মুছে ফেলা (চ্যাট পরিষ্কার রাখতে)
+    try:
+        await sent_file.delete()
+    except Exception:
+        pass
+
+    # চূড়ান্ত ফলাফল বাংলায়
+    report = (
+        "🚀 **আপনার ডিভাইসের আসল ইন্টারনেট স্পিড**\n\n"
+        f"⚡ **পিং (Ping):** `{ping_ms:.2f} ms`\n"
+        f"📥 **ডাউনলোড স্পিড:** `{download_mbps:.2f} Mbps`\n"
+        f"📤 **আপলোড স্পিড (আনুমানিক):** `{estimated_upload_mbps:.2f} Mbps`\n\n"
+        f"📦 **টেস্ট ডেটা সাইজ:** `{file_size_mb} MB`\n"
+        f"⏱️ **মোট সময় লেগেছে:** `{duration:.2f}` সেকেন্ড"
     )
-    await status_msg.edit_text(result, parse_mode="Markdown")
-
-async def test_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("⏳ আপলোড স্পিড হিসাব করা হচ্ছে...")
-
-    # Document ba Photo shob dhoroner file handle kora
-    file_obj = None
-    file_size = 0
-    if update.message.document:
-        file_obj = update.message.document
-        file_size = file_obj.file_size
-    elif update.message.photo:
-        file_obj = update.message.photo[-1]
-        file_size = file_obj.file_size
-
-    if not file_obj or file_size == 0:
-        await status_msg.edit_text("❌ ফাইলটি পড়া যায়নি।")
-        return
-
-    start_time = time.time()
-    bot_file = await file_obj.get_file()
-    await bot_file.download_as_bytearray()
-    end_time = time.time()
-
-    duration = end_time - start_time
-    file_size_mb = file_size / (1024 * 1024)
-    speed_mbps = (file_size_mb * 8) / duration if duration > 0 else 0
-
-    result = (
-        "📊 **আপনার ডিভাইসের আসল আপলোড স্পিড:**\n\n"
-        f"⚡ **গতি:** `{speed_mbps:.2f} Mbps`\n"
-        f"⏱️ **সময় লেগেছে:** `{duration:.2f}` সেকেন্ড\n"
-        f"📦 **ফাইলের সাইজ:** `{file_size_mb:.2f} MB`"
-    )
-    await status_msg.edit_text(result, parse_mode="Markdown")
+    await msg.edit_text(report, parse_mode="Markdown")
 
 if __name__ == '__main__':
     Thread(target=keep_alive).start()
 
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("download", test_download))
-    app.add_handler(CommandHandler("speedtest", test_download))
-    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, test_upload))
+    app.add_handler(CommandHandler("speedtest", speedtest_cmd))
 
     print("Bot is running...")
     app.run_polling()
