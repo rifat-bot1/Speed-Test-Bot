@@ -1,8 +1,8 @@
 import os
-import io
-import time
+import asyncio
 from threading import Thread
 from flask import Flask
+from fastdotcom import fast_speed
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
@@ -19,61 +19,36 @@ def keep_alive():
 
 TOKEN = os.getenv("BOT_TOKEN", "8980876259:AAEdVOHbVpn4xVEbsiYFDKxJvNbeMVutyH4")
 
+def run_fast_test():
+    # Background-e Fast.com er backend servers theke test run kora
+    speed = fast_speed()
+    return speed
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "👋 **স্বাগতম!**\n\n"
-        "আপনার ডিভাইসের আসল ইন্টারনেট স্পিড মাপতে নিচে কমান্ড দিন:\n"
+        "👋 Swagotom!\n\n"
+        "Fast.com er maddhome speed check korte command din:\n"
         "`/speedtest`"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def speedtest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = await update.message.reply_text("⏳ আপনার ফোনের সাথে সংযোগ যাচাই ও পিং টেস্ট করা হচ্ছে...")
+    status_msg = await update.message.reply_text("🔄 Fast.com-er server-er maddhome background-e speed check shuru hocche... thakun ekhane.")
 
-    # ১. পিং টেস্ট
-    t0 = time.time()
-    await msg.edit_text("⚡ পিং (Ping) টেস্ট চলছে...")
-    t1 = time.time()
-    ping_ms = (t1 - t0) * 1000
-
-    # ২. টেস্ট ফাইল তৈরি (টেলিগ্রাম বটের লিমিটের মধ্যে সর্বোচ্চ ৪০ MB ডেটা)
-    file_size_mb = 40  
-    await msg.edit_text(f"📥 আপনার ফোনে {file_size_mb} MB টেস্ট ডেটা পাঠানো হচ্ছে... দয়া করে অপেক্ষা করুন।")
-
-    # RAM-এ ৪০ MB ডামি ডেটা তৈরি
-    dummy_data = b"0" * (file_size_mb * 1024 * 1024)
-
-    # ৩. ডেটা পাঠানোর সময় হিসাব (ডাউনলোড স্পিড)
-    start_time = time.time()
-    sent_file = await update.message.reply_document(
-        document=dummy_data,
-        filename="speedtest_40mb.bin",
-        caption=f"📦 {file_size_mb} MB ডেটা আপনার ফোনে ডাউনলোড হচ্ছে..."
-    )
-    end_time = time.time()
-
-    duration = end_time - start_time
-    
-    # Mbps = (MB * 8) / seconds
-    download_mbps = (file_size_mb * 8) / duration if duration > 0 else 0
-    estimated_upload_mbps = download_mbps * 0.40  # আনুমানিক মোবাইল আপলোড স্পিড
-
-    # টেস্ট শেষ হলে সাময়িক ফাইলটি মুছে ফেলা (চ্যাট পরিষ্কার রাখতে)
+    loop = asyncio.get_running_loop()
     try:
-        await sent_file.delete()
-    except Exception:
-        pass
+        # Background-e Fast.com run kora
+        speed_mbps = await loop.run_in_executor(None, run_fast_test)
 
-    # চূড়ান্ত ফলাফল বাংলায়
-    report = (
-        "🚀 **আপনার ডিভাইসের আসল ইন্টারনেট স্পিড**\n\n"
-        f"⚡ **পিং (Ping):** `{ping_ms:.2f} ms`\n"
-        f"📥 **ডাউনলোড স্পিড:** `{download_mbps:.2f} Mbps`\n"
-        f"📤 **আপলোড স্পিড (আনুমানিক):** `{estimated_upload_mbps:.2f} Mbps`\n\n"
-        f"📦 **টেস্ট ডেটা সাইজ:** `{file_size_mb} MB`\n"
-        f"⏱️ **মোট সময় লেগেছে:** `{duration:.2f}` সেকেন্ড"
-    )
-    await msg.edit_text(report, parse_mode="Markdown")
+        report = (
+            "⚡ **Fast.com Speed Report**\n\n"
+            f"🚀 **Download Speed:** `{speed_mbps:.2f} Mbps`\n"
+            "✅ Check shompurno hoyeche!"
+        )
+        await status_msg.edit_text(report, parse_mode="Markdown")
+
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Speed check korte shomossha hoyeche: {str(e)}")
 
 if __name__ == '__main__':
     Thread(target=keep_alive).start()
