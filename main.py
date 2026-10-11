@@ -17,7 +17,7 @@ def keep_alive():
     port = int(os.environ.get("PORT", 8080))
     web_app.run(host='0.0.0.0', port=port)
 
-TOKEN = os.getenv("BOT_TOKEN", "8980876259:AAEdVOHbVpn4xVEbsiYFDKxJvNbeMVutyH4")
+TOKEN = os.getenv("BOT_TOKEN", "8980876259:AAH0R5-AZ4gnWUIxJtUZawkglBo5oHdqHYs")
 
 def run_fast_test():
     # fastdotcom.fast_com() shorashori Mbps hishebe speed return kore
